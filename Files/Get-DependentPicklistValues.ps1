@@ -12,37 +12,37 @@ $scriptname = "SalesForce Picklist: "
         #region Authenticate to SalesForce
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         #Build credential object and SalesForce authentication
-            $URI = "https://login.salesforce.com"
-            $auth_Username = Get-APSetting IglooUsername
-            $auth_ClientSecret = Get-APSetting IglooClientSecret
-            $auth_Token = Get-APSetting IglooToken
-            $auth_ClientID = Get-APSetting IglooClientID
-            $auth_ServiceAccount = Get-ServiceAccount -Name $auth_Username -Scope 2
-            $auth_ServicePassword = $auth_ServiceAccount.Password #| ConvertTo-SecureString -AsPlainText -Force
-            $auth_granttype = "password"
+            $Token = "<Token>"
+            $UserPassword = "<User Password>"
+            $Password = "$UserPassword$Token"
             
-            $auth_Password = "$auth_ServicePassword$auth_Token"
-            $authURI = "$URI/services/oauth2/token"
-                
-            $authBody = @{
-                grant_type=$auth_GrantType
-                client_id=$auth_ClientID
-                client_secret=$auth_ClientSecret
-                username=$auth_Username
-                password=$auth_Password
-            }  
+            $AuthRequest = @{
+                Uri = "https://login.salesforce.com/services/oauth2/token"
+                Method = "POST"
+                ContentType = "application/json"
+                $Body = @{
+                    grant_type      = "password"
+                    client_id       = "<Client_ID>"
+                    client_secret   = "<Client_Secret>"
+                    username        = "<UserName>"
+                    password        = $Password
+                }  
+            }
+            
                   
             try {
-                $AuthToken = Invoke-RestMethod -Uri $authURI -Method POST -Body $authBody
+                $AuthToken = Invoke-RestMethod @AuthRequest
             } catch {
                 Write-Error "$scriptname Unable to retrieve Authentication token, Exception: $_"
             }
         # Auth token generation
 
+        # Get latest version
+        $version = (Invoke-RestMethod -URI "$($AuthToken.instance_url)/services/data/" -Method "GET" -Headers @{Authorization = "Bearer $($Authtoken.access_token)"} -ContentType "application/json")[-1].version
         
         #region Request SObject describe
         $Request = @{
-            URI = "$($AuthToken.instance_url)/services/data/v20.0/sobjects/$SObjectName/describe"
+            URI = "$($AuthToken.instance_url)/services/data/v$version/sobjects/$SObjectName/describe"
             Method = "GET"
             Headers = @{Authorization = "Bearer $($Authtoken.access_token)"}
             ContentType = "application/json"
@@ -52,6 +52,7 @@ $scriptname = "SalesForce Picklist: "
             $Response = Invoke-RestMethod @Request
         } catch {
             Write-Error "$scriptname Unable to get SObject"
+            throw
         }
         #endregion 
         
@@ -86,15 +87,10 @@ $scriptname = "SalesForce Picklist: "
                     $dependentPicklistLabelArray = @()
                     foreach($position in $picklistDependencyPositions) {
                         $dependentPicklistArray += $DependentObject.picklistvalues[[int]$position]
-                        #$dependentPicklistLabelArray += $DependentObject.picklistvalues[[int]$position].label
-                        $dependentPicklistLabelArray += ($DependentObject.picklistvalues[[int]$position].label).split("-").Trimstart()[1] # Snow Specific
                     }
             
                     $PicklistObject | Add-Member NoteProperty -Name 'DependencyPropertyName' -Value $MainObject.controllerName
                     $PicklistObject | Add-Member NoteProperty -Name 'DependencyPropertyValue' -Value $dependentPicklistArray
-                    $PicklistObject | Add-Member NoteProperty -Name 'DependencyPropertyLabelValue' -Value $dependentPicklistLabelArray
-                          
-                    #write-host "$($pValue.label) $bitChunk" -ForegroundColor Green
                 }    
                 $Picklist += $PicklistObject 
             }
@@ -107,11 +103,8 @@ $scriptname = "SalesForce Picklist: "
             foreach($prop in $PropertySearch) {
                 $PickListItems = $Picklist | Where {$_.label -eq $prop} 
                 
-                foreach ($plItem in $PickListItems.DependencyPropertyValue) {
-                
-                    write-host "$scriptname adding dependent picklist items $($plItem)"
-                    #$result += $_.DependencyPropertyLabelValue
-                    $result  += [pscustomobject]@{displayname = ($plItem.Label).split("-").Trimstart()[1] ; value = $plItem.Label}
+                foreach ($pItem in $PickListItems.DependencyPropertyValue) {
+                    $result  += [pscustomobject]@{displayname = ($pItem.Label).split("-").Trimstart()[1] ; value = $pItem.Label}
                 }
             }
         }
