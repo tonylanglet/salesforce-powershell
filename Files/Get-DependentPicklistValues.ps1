@@ -1,6 +1,6 @@
 ﻿function Get-DependentPicklistValues {
 Param(
-    $PropertySearch,
+    [string[]]$PropertySearch,
     $SObjectName,
     $MainPropertyName
 )
@@ -98,13 +98,12 @@ $scriptname = "SalesForce Picklist: "
             write-host "No controll name or the picklistvalues are empty"
         }
         
-        #$PropertySearch = $PropertySearch.Split(",")
         if($PropertySearch.count -gt 0) {
             foreach($prop in $PropertySearch) {
                 $PickListItems = $Picklist | Where {$_.label -eq $prop} 
                 
                 foreach ($pItem in $PickListItems.DependencyPropertyValue) {
-                    $result  += [pscustomobject]@{displayname = ($pItem.Label).split("-").Trimstart()[1] ; value = $pItem.Label}
+                    $result += $pItem
                 }
             }
         }
@@ -112,5 +111,5 @@ $scriptname = "SalesForce Picklist: "
         $result += [pscustomobject]@{displayname = 'No value'; value = ''}
     }
 
-$result
+return $result
 }
